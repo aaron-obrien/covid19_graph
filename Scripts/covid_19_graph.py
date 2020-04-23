@@ -3,8 +3,6 @@
 
 import requests
 import csv
-import matplotlib as mpl
-import matplotlib.pyplot as plt
 import pandas as pd
 import math
 from datetime import datetime
@@ -24,54 +22,52 @@ ESSENTIAL
 #1.2 updates: X axis presents much better, code is now functionalised
 #1.3 TODO: Error handling
 
-def countrychecker(inputted_country):
+def countrychecker(input_val):
     '''
     Checks if the inputted country matches data in the API, returning a bool,.
     '''
-    import pandas
+    import pandas as pd
+    import requests
 
-    #Read permitted countries into dataframe
+    #Read listed countries into dataframe from API.
     country_api_path = ('https://api.covid19api.com/countries')
     df = pd.read_json(country_api_path)
 
-    #Parse list checking if country matches the permtited list.
-    is_iso_there = df['ISO2'].str.contains(inputted_country.upper(), regex = 'False').any()
-    is_country_there = df['Country'].str.contains(inputted_country.capitalize(), regex = 'False').any()
-
-    if is_iso_there == True:
-        globalcountry = df.loc[df.ISO2 == inputted_country.upper(), 'Country']
-        listtype = 'ISO'
-        output_list = [True, globalcountry, listtype]
-        return output_list
-
-    elif is_country_there == True:
-        globalcountry = df.loc[df.Country == inputted_country.upper, 'Country']
-        globalISO = df.loc[df.ISO2 == inputted_country.upper, 'ISO2']
+    ISO2_list, countries_list = [], []    #Initialise lists
+    ISO2_list, countries_list = df['ISO2'].values.tolist(), df['Country'].values.tolist()    #Assign ISO2 and country lists with values from dataframe
+    
+    if input_val.capitalize() in countries_list:  #Check ISO2 in list
+        return_ISO2 = df.loc[df.Country == input_val.upper(), 'ISO2']    #Retrieve ISO from ISO list///
         listtype = 'Country'
-        output_list = [True, globalISO, listtype]
+        output_list = [True, return_ISO2, listtype]
         return output_list
 
-    elif is_country_there == False or is_iso_there == False:
+    elif input_val.upper() in ISO2_list:  #Check country in API retrieved list.
+        return_country = df.loc[df.ISO2 == input_val.upper(), 'Country']    #Retrieve country name from list, where an ISO2 code is inputted (for graphing purposes).
+        listtype = 'ISO'
+        output_list = [True, return_country, listtype]
+        return output_list
+        
+    else:
         return False
+
+
+    #is_iso_there = df['ISO2'].str.contains(input_val.upper(), regex = 'False').any()    #Check ISO against list
+    #is_country_there = df['Country'].str.contains(input_val.capitalize(), regex = 'False').any()    #Check country against list
 
 def get_covid_api_data(country_or_iso):
     '''
     Retrieves the COVID 19 API data from an inputted country
     '''
+    import requests
 
-    #Concatenate website for API request
-    api_website_input = ('https://api.covid19api.com/dayone/country/' + country_or_iso + '/status/confirmed')
-    print(api_website_input)
-    #API request
-    try:
-        covid_api_data = requests.get(api_website_input)
-        if covid_api_data.status_code == 200:
-            return covid_api_data
-        else:
-            print ('API data not retrieved. Please input a country or ISO2 code listed under https://api.covid19api.com/countries')
-            raise SystemExit()
-    except requests.exceptions.RequestException:
-        print('API data was not retrieved. Please input a country or ISO2 code listed under https://api.covid19api.com/countries')
+    api_website_input = ('https://api.covid19api.com/dayone/country/' + country_or_iso + '/status/confirmed')   #Concatenate website for API request
+    covid_api_data = requests.get(api_website_input)    #API request
+
+    if covid_api_data.status_code == 200:   #API error handling
+        return covid_api_data
+    else:
+        print ('API data not retrieved. Please input a country or ISO2 code listed under https://api.covid19api.com/countries')
         raise SystemExit()
 
 def make_csv(apidata,country_name):
@@ -79,6 +75,9 @@ def make_csv(apidata,country_name):
     Writes retrieved COVID19 API data to a CSV file, named "covid_data_[countryname].csv"
     '''
     import datetime
+    import os.path
+    import json
+    
     #Assign raw data from json format
     raw_covid_data = apidata.json()
 
@@ -93,7 +92,7 @@ def make_csv(apidata,country_name):
     #Initalise counter
     count=0
 
-    #Write each row to csv
+    #Loop over each row, + write to csv
     for header in raw_covid_data:
         if count == 0:
             cur_header = header.keys()
@@ -102,9 +101,9 @@ def make_csv(apidata,country_name):
 
         csv_writer.writerow(header.values())
     
-    #Close file and return csv_name
-    covid_data.close()
-    return filepath
+    
+    covid_data.close()  #Close file
+    return filepath     #Return CSV path
 
 def plot_csv(csv_location):
     '''
@@ -112,43 +111,42 @@ def plot_csv(csv_location):
     '''
     import datetime
     import os
+    import matplotlib.pyplot as plt
+    import pandas
 
-    if os.stat(csv_location).st_size > 10:
+    if os.stat(csv_location).st_size < 10:
         print('Insufficient data is held for this Country/Region. Please rerun the script with a country or ISO2 code listed under https://api.covid19api.com/countries')
+        raise SystemExit()
 
     #Read csv into pandas dataframe + populate dataframe
-    dataset = pd.read_csv(csv_location)
-    df = pd.DataFrame(dataset)
-    df['Date'] = pd.to_datetime(df['Date'], infer_datetime_format=True)
+    dataset = pd.read_csv(csv_location)    #Read CSV
+    df = pd.DataFrame(dataset)  #Read in DF 
+    df['Date'] = pd.to_datetime(df['Date'], infer_datetime_format=True)    #Date formatting for plot
 
-    plot_title = ('Covid-19 cases in ' + (Determined_country.capitalize()) + ' since first case.')
+    plot_title = ('Covid-19 cases in ' + (Determined_country.capitalize()) + ' since first case.')  #Plot tile
 
-    ## Plotting code
     #Plot graph
     df.plot(kind='line', x='Date', y='Cases', color='blue')
     plt.title(plot_title)
     plt.ylabel('Number of cases (log10 scale)')
     plt.xlabel('Time')
     plt.yscale('log')
-    
-    response = input('Would you like to save the graph? Type Y for yes or anything else for No. [Enter]     ')
-    if response.upper() == 'Y' or 'Yes':
-        Current_Date_Formatted = datetime.datetime.today().strftime ('%d%m%Y')
-        figurefilepath = os.path.join(os.path.dirname(csv_location), Determined_country) 
-        plt.savefig((figurefilepath + '_' + Current_Date_Formatted), format = 'pdf')
     plt.show()
+
+    response = input('Would you like to save the graph? Type Y for yes or anything else for No. [Enter]    ')   #User choice for saving figure
+    if response.lower() == 'y' or 'yes':
+        Current_Date_Formatted = datetime.datetime.today().strftime ('%d%m%Y')  #Format date for saving figure
+        figurefilepath = os.path.join(os.path.dirname(csv_location), Determined_country)    #Define path to save figure
+        plt.savefig((figurefilepath + '_' + Current_Date_Formatted), format = 'pdf')    #Save figure
     return df
 
-#User inputs country
-user_input = input('Please input a country or ISO2 code for covid_19 analysis: ')
 
-#Checks if error handling output is list (expected outcome).
-if type(countrychecker(user_input)) is list:
-    listed_outputs = countrychecker(user_input)
-
-    #ISO input
-    if listed_outputs[2] == 'ISO':
-        Determined_country = pd.Series.to_string(listed_outputs[1])
+user_input = str(input('Please input a country or ISO2 code for covid_19 analysis: '))   #User inputs country
+listed_outputs = countrychecker(user_input) #Outputs listed for error checking
+try:
+    if listed_outputs[2] == 'ISO':  #ISO input
+        Determined_country = listed_outputs[1].tolist()[0]
+        print(Determined_country)
         if listed_outputs[0] == True:
             print('Corresponding country to ISO2 code: ', Determined_country)
             api_data = get_covid_api_data(user_input)
@@ -156,13 +154,11 @@ if type(countrychecker(user_input)) is list:
             plot_csv(csv_name)
         else:
             print('Country not recognised. Please input a country or ISO2 code listed under https://api.covid19api.com/countries')
-    
-    #Country input
-    elif listed_outputs[2] == 'Country':
+
+    elif listed_outputs[2] == 'Country':    #Country input
         if listed_outputs[0] == True:
             #Assigns the user inputted country to CSV + Plot making functions.
             Determined_country = user_input
-            DeterminedISO = pd.Series.to_string(listed_outputs[1])
             print('Country found.')
 
             api_data = get_covid_api_data(Determined_country)
@@ -171,16 +167,27 @@ if type(countrychecker(user_input)) is list:
         else:
             print('Country not recognised. Please input a country or ISO2 code listed under https://api.covid19api.com/countries')
 
-elif type(countrychecker(user_input)) is bool:
-    if countrychecker(user_input) == True:
-        Determined_country = user_input
-        api_data = get_covid_api_data(Determined_country)
-        csv_name = make_csv(api_data, Determined_country)
-        plot_csv(csv_name)
-    if countrychecker(user_input) == False:
-        print('Country not recognised. Please input a country or ISO2 code listed under https://api.covid19api.com/countries')
+except(TypeError):
+    print('Country not found. Please input a country or ISO2 code listed under https://api.covid19api.com/countries')
+    raise SystemExit()
 
-#TODO: pd.series.to_string to get just the country name.
-#      Same with the ISO name.
-#      Ensure the script takes common names (E.g. England, United Kingdom, United States.)
-#      Provide fix to csv filesize error.
+
+### Excess code:
+'''
+            ISO_match = difflib.get_close_matches(input_val, ISO2_list, n=1, cutoff=0.6)
+            if ISO_match == []:
+                ISO_match = '[\'N/A\']'
+            country_match = difflib.get_close_matches(input_val, countries_list, n=1, cutoff=0)
+            if country_match == []:
+                country_match = '[\'N/A\']'
+            second_resp = print('Country/ISO2 code not found against list. Closest ISO2 match:', ISO_match, '. Closest country match:', country_match, '. Type 1 to proceed with the ISO match or 2 to proceed with the country match.')
+            
+            if second_resp == 1:
+                input_val = ISO_match
+            elif second_resp == 2:
+                input_val = country_match
+
+
+            count +=1
+            #return False
+'''
